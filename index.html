@@ -20,17 +20,17 @@
         <span class="btn-label">Lists</span>
       </button>
       <div class="header-title-wrap">
-        <span id="badge-tier" class="badge-ft hidden"></span>
+        <span id="badge-archived" class="badge-archived hidden">ARCHIVED</span>
         <h1 id="plan-title">Checklist Viewer</h1>
       </div>
       <div class="header-actions">
-        <span id="sync-status" class="sync-pill" title="Tap to configure or refresh Gist sync">Sync</span>
+        <span id="sync-status" class="sync-pill" title="Tap to refresh Gist sync">Sync</span>
         <button id="btn-isearch-modal" class="secondary-btn hidden" title="Bulk inventory check">Audit</button>
         <button id="btn-sync-settings" class="icon-btn" title="Cloud Sync Settings">⚙</button>
       </div>
     </header>
 
-    <!-- Slide-over Drawer for Switching & Searching Plans -->
+    <!-- Slide-over Drawer for Switching, Searching, Archiving & Deleting Plans -->
     <aside id="plans-drawer" class="drawer hidden" aria-hidden="true">
       <div class="drawer-backdrop" id="drawer-backdrop"></div>
       <div class="drawer-panel">
@@ -45,12 +45,16 @@
             placeholder="Search by title, tag, item, or location..."
             autocomplete="off"
           />
+          <label class="toggle-label drawer-archive-toggle">
+            <input type="checkbox" id="chk-show-archived" checked />
+            <span>Show / Search Archived Lists</span>
+          </label>
         </div>
         <div id="plan-list-container" class="plan-list"></div>
       </div>
     </aside>
 
-    <!-- First-Time Cloud Sync Pairing Card (Shown when no Gist credentials are in localStorage) -->
+    <!-- First-Time Cloud Sync Pairing Card -->
     <main class="main-content" id="setup-content" style="display: none;">
       <section class="card summary-card" style="max-width: 520px; margin: 32px auto;">
         <h2 style="margin-top: 0; color: var(--accent-gold);">Connect Private Gist Sync</h2>
@@ -82,11 +86,25 @@
       </section>
     </main>
 
-    <!-- Main Content Area (Responsive Single Column on Phone, Split Grid on iPad) -->
+    <!-- Main Content Area -->
     <main class="main-content" id="main-content">
-      <!-- Plan Summary & Progress Banner -->
+      <!-- Plan Summary, Controls & Progress Banner -->
       <section class="card summary-card" id="summary-section">
-        <p id="plan-summary" class="plan-summary-text"></p>
+        <div class="summary-top-row">
+          <p id="plan-summary" class="plan-summary-text"></p>
+          <div class="plan-manage-actions" id="plan-manage-actions">
+            <button id="btn-complete-plan" class="small-action-btn" title="Mark entire plan completed or incomplete">
+              ✓ Complete Plan
+            </button>
+            <button id="btn-archive-plan" class="small-action-btn" title="Archive or unarchive this plan">
+              Archive
+            </button>
+            <button id="btn-delete-plan" class="small-action-btn danger-btn" title="Delete this plan">
+              Delete
+            </button>
+          </div>
+        </div>
+
         <div id="plan-tags" class="tags-row"></div>
 
         <div class="progress-bar-wrap">
@@ -111,6 +129,7 @@
           <section class="card" id="prereq-section">
             <div class="section-header">
               <h2>Prerequisites &amp; Advance Prep</h2>
+              <button id="btn-toggle-all-prereqs" class="small-action-btn">✓ Complete Prep</button>
             </div>
             <ul id="prereq-list" class="checklist"></ul>
           </section>
@@ -148,6 +167,47 @@
         </div>
       </div>
     </main>
+
+    <!-- Automatic Plan Completion Popup Modal -->
+    <div id="completion-modal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-backdrop" id="completion-backdrop"></div>
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>🎉 List Completed!</h3>
+          <button id="btn-close-completion" class="icon-btn">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-desc" id="completion-modal-desc">
+            You have completed all steps in this list. Would you like to archive it, delete it, or leave it open?
+          </p>
+          <div class="modal-actions-row">
+            <button id="btn-modal-archive" class="primary-btn">Archive List</button>
+            <button id="btn-modal-delete" class="small-action-btn danger-btn">Delete List</button>
+            <button id="btn-modal-keep" class="secondary-btn">Leave It Open</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="delete-modal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-backdrop" id="delete-backdrop"></div>
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>Delete List?</h3>
+          <button id="btn-close-delete" class="icon-btn">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-desc" id="delete-modal-desc">
+            Are you sure you want to permanently delete this list across your synced devices?
+          </p>
+          <div class="modal-actions-row">
+            <button id="btn-confirm-delete" class="small-action-btn danger-btn">Delete Permanently</button>
+            <button id="btn-cancel-delete" class="secondary-btn">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- Bulk Inventory Audit Modal -->
     <div id="isearch-modal" class="modal hidden" role="dialog" aria-modal="true">

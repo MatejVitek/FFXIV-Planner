@@ -1,4 +1,4 @@
-const CACHE_NAME = 'checklist-viewer-v3';
+const CACHE_NAME = 'checklist-viewer-v4';
 const ASSETS = ['./', './index.html', './styles.css', './app.js', './manifest.json'];
 
 self.addEventListener('install', (event) => {
@@ -18,7 +18,6 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
-  // Never intercept GitHub API calls with cache-first; always fetch live and fall back
   if (url.hostname === 'api.github.com') return;
 
   event.respondWith(

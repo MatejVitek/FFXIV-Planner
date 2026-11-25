@@ -94,7 +94,7 @@ body {
   min-width: 0;
 }
 
-.badge-ft {
+.badge-ft, .badge-archived {
   display: inline-block;
   font-size: 10px;
   font-weight: 700;
@@ -105,6 +105,12 @@ body {
   padding: 1px 7px;
   border-radius: 999px;
   margin-bottom: 2px;
+}
+
+.badge-archived {
+  color: var(--accent-warn);
+  background: rgba(245, 158, 66, 0.14);
+  border-color: rgba(245, 158, 66, 0.4);
 }
 
 .top-bar h1 {
@@ -189,6 +195,124 @@ body {
 
 .summary-card {
   border-color: var(--border-gold);
+}
+
+.summary-top-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.summary-top-row .plan-summary-text {
+  flex: 1;
+  min-width: 220px;
+  margin: 0;
+}
+
+.plan-manage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.small-action-btn {
+  cursor: pointer;
+  background: var(--bg-card-alt);
+  color: var(--text-main);
+  border: 1px solid var(--border-subtle);
+  border-radius: 7px;
+  padding: 5px 10px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.small-action-btn:hover {
+  border-color: var(--accent-gold);
+}
+
+.danger-btn {
+  color: var(--accent-danger);
+  border-color: rgba(242, 95, 92, 0.35);
+  background: rgba(242, 95, 92, 0.08);
+}
+
+.phase-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  margin: 14px 0 8px;
+  border-radius: 8px;
+  background: var(--bg-input);
+  border-left: 3px solid var(--accent-gold);
+}
+
+.phase-group-header:first-child {
+  margin-top: 2px;
+}
+
+.phase-group-title {
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--accent-gold);
+}
+
+.phase-group-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.phase-group-count {
+  font-size: 0.76rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.drawer-archive-toggle {
+  margin-top: 8px;
+  display: flex;
+}
+
+.drawer-section-label {
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin: 12px 4px 6px;
+}
+
+.drawer-section-label:first-child {
+  margin-top: 2px;
+}
+
+.plan-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.plan-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.modal-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 14px;
 }
 
 .plan-summary-text {

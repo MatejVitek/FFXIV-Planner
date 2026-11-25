@@ -1,8 +1,12 @@
 /**
  * Checklist & Route Viewer - Client App with Secret GitHub Gist Two-Way Sync
  *
- * Notice: Static code is completely work-safe and game-agnostic. All plan data
- * is fetched privately from the user's authenticated Secret GitHub Gist.
+ * Features:
+ *   - System Light/Dark theme adaptive UI
+ *   - Archive / Unarchive & Delete lists (with tombstones synced across all devices)
+ *   - Active vs Archived sections in drawer search ("Show / Search Archived Lists")
+ *   - Whole-Plan, Prerequisites Section, and Per-Phase completion toggles
+ *   - Automatic Completion Modal when a list reaches 100% completion
  */
 
 const STORAGE_LAST_PLAN_KEY = 'checklist_viewer_last_plan_id';
@@ -11,9 +15,10 @@ const STORAGE_GIST_ID_KEY = 'checklist_viewer_gist_id';
 const STORAGE_GIST_TOKEN_KEY = 'checklist_viewer_gist_token';
 const GIST_FILENAME = 'checklist-sync-store.json';
 
-let bundleData = { index: { latestPlanId: null, plans: [] }, plans: {} };
+let bundleData = { index: { latestPlanId: null, deletedPlanIds: [], plans: [] }, plans: {} };
 let currentPlan = null;
 let pushTimeout = null;
+let pendingDeletePlanId = null;
 
 function norm(s) {
   return String(s || '').trim().toLowerCase();
@@ -36,10 +41,6 @@ function setCredentials(gistId, token) {
   }
 }
 
-/**
- * Checks URL hash (#gist=<id>&token=<pat>) for 1-click / QR-code device pairing,
- * saves credentials to localStorage, and immediately scrubs the hash from the URL bar.
- */
 function checkUrlPairingHash() {
   if (!window.location.hash || window.location.hash.length < 2) return false;
   const params = new URLSearchParams(window.location.hash.slice(1));
@@ -56,8 +57,46 @@ function checkUrlPairingHash() {
 function setSyncBadge(online, text) {
   const el = document.getElementById('sync-status');
   if (!el) return;
-  el.textContent = text || (online ? 'Gist Synced' : 'Offline Cache');
+  el.textContent = text || (online ? 'Cloud Synced' : 'Offline Cache');
   el.classList.toggle('offline', !online);
+}
+
+function isPlanFullyCompleted(plan) {
+  if (!plan) return false;
+  const steps = plan.steps || [];
+  if (steps.length === 0) return false;
+  return steps.every((s) => s.completed);
+}
+
+function rebuildBundleIndexClient() {
+  const allPlans = Object.values(bundleData.plans || {}).map((p) => {
+    const totalSteps = Array.isArray(p.steps) ? p.steps.length : 0;
+    const completedSteps = Array.isArray(p.steps) ? p.steps.filter((s) => s.completed).length : 0;
+    const totalItems = Array.isArray(p.items) ? p.items.length : 0;
+    return {
+      id: p.id,
+      title: p.title || p.id,
+      summary: p.summary || '',
+      tags: p.tags || [],
+      archived: Boolean(p.archived),
+      createdAt: p.createdAt || p.updatedAt,
+      updatedAt: p.updatedAt,
+      totalSteps,
+      completedSteps,
+      totalItems
+    };
+  });
+
+  allPlans.sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
+  const activePlans = allPlans.filter((p) => !p.archived);
+  const deletedIds = Array.isArray(bundleData.index?.deletedPlanIds) ? bundleData.index.deletedPlanIds : [];
+
+  bundleData.index = {
+    latestPlanId: activePlans[0]?.id || allPlans[0]?.id || null,
+    deletedPlanIds: [...new Set(deletedIds)],
+    updatedAt: new Date().toISOString(),
+    plans: allPlans
+  };
 }
 
 function recalculatePlanClient(plan) {
@@ -108,14 +147,67 @@ function recalculatePlanClient(plan) {
     }
   }
   plan.updatedAt = new Date().toISOString();
-  // Also update summary stats in index
-  const idxEntry = (bundleData.index?.plans || []).find((p) => p.id === plan.id);
-  if (idxEntry) {
-    idxEntry.completedSteps = (plan.steps || []).filter((s) => s.completed).length;
-    idxEntry.totalSteps = (plan.steps || []).length;
-    idxEntry.updatedAt = plan.updatedAt;
-  }
+  rebuildBundleIndexClient();
   return plan;
+}
+
+/**
+ * Wraps any user mutation on currentPlan to detect when the plan transitions
+ * from incomplete (<100%) to 100% completed, triggering the completion popup!
+ */
+function mutateCurrentPlanWithCompletionCheck(mutatorFn) {
+  if (!currentPlan) return;
+  const wasCompleted = isPlanFullyCompleted(currentPlan);
+  mutatorFn(currentPlan);
+  recalculatePlanClient(currentPlan);
+  const nowCompleted = isPlanFullyCompleted(currentPlan);
+
+  renderCurrentPlan();
+  renderDrawerPlanList();
+  schedulePushToGist();
+
+  if (!wasCompleted && nowCompleted && !currentPlan.archived) {
+    showCompletionModal();
+  }
+}
+
+function archivePlanById(planId, archiveState) {
+  const plan = bundleData.plans?.[planId];
+  if (!plan) return;
+  plan.archived = Boolean(archiveState);
+  plan.updatedAt = new Date().toISOString();
+  rebuildBundleIndexClient();
+  schedulePushToGist();
+
+  if (currentPlan && currentPlan.id === planId) {
+    renderCurrentPlan();
+  }
+  renderDrawerPlanList();
+}
+
+function deletePlanById(planId) {
+  if (!planId) return;
+  delete bundleData.plans[planId];
+  if (!bundleData.index) {
+    bundleData.index = { latestPlanId: null, deletedPlanIds: [], plans: [] };
+  }
+  if (!Array.isArray(bundleData.index.deletedPlanIds)) {
+    bundleData.index.deletedPlanIds = [];
+  }
+  if (!bundleData.index.deletedPlanIds.includes(planId)) {
+    bundleData.index.deletedPlanIds.push(planId);
+  }
+  rebuildBundleIndexClient();
+  schedulePushToGist();
+
+  if (currentPlan && currentPlan.id === planId) {
+    currentPlan = null;
+    localStorage.removeItem(STORAGE_LAST_PLAN_KEY);
+    const nextId = selectInitialPlanId();
+    openPlan(nextId);
+  } else {
+    renderDrawerPlanList();
+  }
 }
 
 async function fetchFromGist() {
@@ -137,6 +229,7 @@ async function fetchFromGist() {
     const fileObj = gist.files?.[GIST_FILENAME] || Object.values(gist.files || {})[0];
     if (fileObj && fileObj.content) {
       bundleData = JSON.parse(fileObj.content);
+      rebuildBundleIndexClient();
       localStorage.setItem(STORAGE_BUNDLE_CACHE_KEY, JSON.stringify(bundleData));
       setSyncBadge(true, 'Cloud Synced');
       return true;
@@ -145,6 +238,7 @@ async function fetchFromGist() {
     const cached = localStorage.getItem(STORAGE_BUNDLE_CACHE_KEY);
     if (cached) {
       bundleData = JSON.parse(cached);
+      rebuildBundleIndexClient();
     }
     setSyncBadge(false, 'Offline Cache');
   }
@@ -182,7 +276,7 @@ function schedulePushToGist() {
     } catch {
       setSyncBadge(false, 'Saved Locally');
     }
-  }, 550);
+  }, 450);
 }
 
 function parseInventoryTextClient(plan, rawText) {
@@ -214,16 +308,35 @@ function selectInitialPlanId() {
 
   const lastOpenedOnDevice = localStorage.getItem(STORAGE_LAST_PLAN_KEY);
   if (lastOpenedOnDevice && validIds.has(lastOpenedOnDevice)) {
-    return lastOpenedOnDevice;
+    const lastPlan = bundleData.plans?.[lastOpenedOnDevice];
+    if (lastPlan && !lastPlan.archived) {
+      return lastOpenedOnDevice;
+    }
   }
+  const firstActive = plansList.find((p) => !p.archived);
+  if (firstActive) return firstActive.id;
   return bundleData.index?.latestPlanId || (plansList[0]?.id ?? null);
 }
 
 function openPlan(planId) {
-  const plan = bundleData.plans?.[planId];
+  const plan = planId ? bundleData.plans?.[planId] : null;
   if (!plan) {
-    document.getElementById('plan-title').textContent = 'No Checklists Loaded';
-    document.getElementById('plan-summary').textContent = 'Create or sync a plan to view it here.';
+    currentPlan = null;
+    document.getElementById('plan-title').textContent = 'No Active Lists';
+    document.getElementById('plan-summary').textContent =
+      'Open the Lists menu (☰) to view archived lists, or ask Antigravity to create a new plan.';
+    document.getElementById('badge-archived').classList.add('hidden');
+    document.getElementById('plan-manage-actions').classList.add('hidden');
+    document.getElementById('plan-tags').innerHTML = '';
+    document.getElementById('currency-chips').innerHTML = '';
+    document.getElementById('ft-warnings').classList.add('hidden');
+    document.getElementById('prereq-section').classList.add('hidden');
+    document.getElementById('steps-list').innerHTML = '<p class="sub-hint">No steps to display.</p>';
+    document.querySelector('.inventory-column').classList.add('hidden');
+    document.getElementById('progress-label').textContent = '0 / 0 Steps Completed';
+    document.getElementById('progress-percent').textContent = '0%';
+    document.getElementById('progress-fill').style.width = '0%';
+    renderDrawerPlanList();
     return;
   }
   currentPlan = plan;
@@ -232,12 +345,54 @@ function openPlan(planId) {
   renderDrawerPlanList();
 }
 
+function createDrawerPlanCard(item) {
+  const div = document.createElement('div');
+  div.className = `plan-card-item ${currentPlan && currentPlan.id === item.id ? 'active' : ''}`;
+  const dateStr = item.updatedAt ? new Date(item.updatedAt).toLocaleDateString() : '';
+  const pct = item.totalSteps > 0 ? Math.round(((item.completedSteps || 0) / item.totalSteps) * 100) : 0;
+
+  div.innerHTML = `
+    <div class="plan-card-top">
+      <div class="plan-card-title">${escapeHtml(item.title)}</div>
+      ${item.archived ? '<span class="badge-archived">ARCHIVED</span>' : ''}
+    </div>
+    <div class="plan-card-meta">
+      ${item.completedSteps || 0}/${item.totalSteps || 0} steps (${pct}%) • ${item.totalItems || 0} items • ${dateStr}
+    </div>
+    <div class="plan-card-actions">
+      <button class="small-action-btn btn-card-archive">
+        ${item.archived ? 'Unarchive' : 'Archive'}
+      </button>
+      <button class="small-action-btn danger-btn btn-card-delete">Delete</button>
+    </div>
+  `;
+
+  div.addEventListener('click', (e) => {
+    if (e.target.closest('button')) return;
+    openPlan(item.id);
+    toggleDrawer(false);
+  });
+
+  div.querySelector('.btn-card-archive').addEventListener('click', (e) => {
+    e.stopPropagation();
+    archivePlanById(item.id, !item.archived);
+  });
+
+  div.querySelector('.btn-card-delete').addEventListener('click', (e) => {
+    e.stopPropagation();
+    promptDeletePlan(item.id, item.title);
+  });
+
+  return div;
+}
+
 function renderDrawerPlanList() {
   const container = document.getElementById('plan-list-container');
   const q = norm(document.getElementById('plan-search-input')?.value || '');
+  const showArchived = document.getElementById('chk-show-archived')?.checked ?? true;
   container.innerHTML = '';
 
-  const list = (bundleData.index?.plans || []).filter((p) => {
+  const matchingPlans = (bundleData.index?.plans || []).filter((p) => {
     if (!q) return true;
     const fullPlan = bundleData.plans?.[p.id];
     const extraSearch = fullPlan ? JSON.stringify(fullPlan) : '';
@@ -245,34 +400,54 @@ function renderDrawerPlanList() {
     return hay.includes(q);
   });
 
-  if (list.length === 0) {
-    container.innerHTML = `<p class="sub-hint">No matching lists found.</p>`;
+  const activeList = matchingPlans.filter((p) => !p.archived);
+  const archivedList = matchingPlans.filter((p) => p.archived);
+
+  if (activeList.length === 0 && (!showArchived || archivedList.length === 0)) {
+    const hiddenArchivedHint = !showArchived && archivedList.length > 0
+      ? ` (${archivedList.length} matching archived list${archivedList.length > 1 ? 's' : ''} hidden — check "Show / Search Archived Lists" above)`
+      : '';
+    container.innerHTML = `<p class="sub-hint">No matching lists found${hiddenArchivedHint}.</p>`;
     return;
   }
 
-  for (const item of list) {
-    const div = document.createElement('div');
-    div.className = `plan-card-item ${currentPlan && currentPlan.id === item.id ? 'active' : ''}`;
-    const dateStr = item.updatedAt ? new Date(item.updatedAt).toLocaleDateString() : '';
-    div.innerHTML = `
-      <div class="plan-card-title">${escapeHtml(item.title)}</div>
-      <div class="plan-card-meta">
-        ${item.completedSteps || 0}/${item.totalSteps || 0} steps • ${item.totalItems || 0} items • ${dateStr}
-      </div>
-    `;
-    div.addEventListener('click', () => {
-      openPlan(item.id);
-      toggleDrawer(false);
-    });
-    container.appendChild(div);
+  if (activeList.length > 0) {
+    const lbl = document.createElement('div');
+    lbl.className = 'drawer-section-label';
+    lbl.textContent = `Active Lists (${activeList.length})`;
+    container.appendChild(lbl);
+    for (const item of activeList) {
+      container.appendChild(createDrawerPlanCard(item));
+    }
+  }
+
+  if (showArchived && archivedList.length > 0) {
+    const lbl = document.createElement('div');
+    lbl.className = 'drawer-section-label';
+    lbl.textContent = `Archived Lists (${archivedList.length})`;
+    container.appendChild(lbl);
+    for (const item of archivedList) {
+      container.appendChild(createDrawerPlanCard(item));
+    }
   }
 }
 
 function renderCurrentPlan() {
   if (!currentPlan) return;
 
+  document.getElementById('plan-manage-actions').classList.remove('hidden');
   document.getElementById('plan-title').textContent = currentPlan.title || currentPlan.id;
   document.getElementById('plan-summary').textContent = currentPlan.summary || '';
+
+  const archivedBadge = document.getElementById('badge-archived');
+  archivedBadge.classList.toggle('hidden', !currentPlan.archived);
+
+  const btnArchive = document.getElementById('btn-archive-plan');
+  btnArchive.textContent = currentPlan.archived ? 'Unarchive' : 'Archive';
+
+  const fullyDone = isPlanFullyCompleted(currentPlan);
+  const btnCompletePlan = document.getElementById('btn-complete-plan');
+  btnCompletePlan.textContent = fullyDone ? '↺ Mark Plan Incomplete' : '✓ Complete Plan';
 
   const auditBtn = document.getElementById('btn-isearch-modal');
   if ((currentPlan.items || []).length > 0) {
@@ -312,11 +487,15 @@ function renderCurrentPlan() {
   // Prerequisites
   const prereqSection = document.getElementById('prereq-section');
   const prereqList = document.getElementById('prereq-list');
+  const btnTogglePrereqs = document.getElementById('btn-toggle-all-prereqs');
   const prereqs = currentPlan.prerequisites || [];
   if (prereqs.length === 0) {
     prereqSection.classList.add('hidden');
   } else {
     prereqSection.classList.remove('hidden');
+    const allPrereqsDone = prereqs.every((p) => p.completed);
+    btnTogglePrereqs.textContent = allPrereqsDone ? '↺ Reset Prep' : '✓ Complete Prep';
+
     prereqList.innerHTML = '';
     for (const pr of prereqs) {
       const li = document.createElement('li');
@@ -335,20 +514,64 @@ function renderCurrentPlan() {
     }
   }
 
-  // Route Steps
+  // Route Steps grouped by Phase with per-phase completion buttons
   const stepsContainer = document.getElementById('steps-list');
   const hideCompleted = document.getElementById('chk-hide-completed')?.checked || false;
   const stepQuery = norm(document.getElementById('step-filter-input')?.value || '');
   stepsContainer.innerHTML = '';
 
+  // Compute phase stats across all steps in the plan
+  const phaseStats = new Map();
+  for (const s of steps) {
+    const pName = s.phase || 'Steps';
+    if (!phaseStats.has(pName)) {
+      phaseStats.set(pName, { total: 0, done: 0, steps: [] });
+    }
+    const st = phaseStats.get(pName);
+    st.total++;
+    if (s.completed) st.done++;
+    st.steps.push(s);
+  }
+
   const filteredSteps = steps.filter((s) => {
     if (hideCompleted && s.completed) return false;
     if (!stepQuery) return true;
-    const hay = norm(`${s.zone} ${s.coords} ${s.npc} ${s.action} ${s.notes || ''} ${s.aetheryte || ''}`);
+    const hay = norm(`${s.zone} ${s.coords} ${s.npc} ${s.action} ${s.notes || ''} ${s.aetheryte || ''} ${s.phase || ''}`);
     return hay.includes(stepQuery);
   });
 
+  let lastRenderedPhase = null;
+
   for (const step of filteredSteps) {
+    const phaseName = step.phase || 'Steps';
+    if (phaseName !== lastRenderedPhase && phaseStats.size > 1) {
+      lastRenderedPhase = phaseName;
+      const pStat = phaseStats.get(phaseName);
+      const allPhaseDone = pStat && pStat.done === pStat.total;
+
+      const phaseBar = document.createElement('div');
+      phaseBar.className = 'phase-group-header';
+      phaseBar.innerHTML = `
+        <span class="phase-group-title">${escapeHtml(phaseName)}</span>
+        <div class="phase-group-right">
+          <span class="phase-group-count">${pStat.done}/${pStat.total}</span>
+          <button class="small-action-btn btn-toggle-phase">
+            ${allPhaseDone ? '↺ Reset Phase' : '✓ Complete Phase'}
+          </button>
+        </div>
+      `;
+      phaseBar.querySelector('.btn-toggle-phase').addEventListener('click', () => {
+        mutateCurrentPlanWithCompletionCheck(() => {
+          const targetState = !allPhaseDone;
+          for (const st of pStat.steps) {
+            st.completed = targetState;
+            if (!targetState) st.autoCompletedByInventory = false;
+          }
+        });
+      });
+      stepsContainer.appendChild(phaseBar);
+    }
+
     const div = document.createElement('div');
     div.className = `step-item ${step.completed ? 'completed' : ''}`;
     const coordsText = step.coords ? `(${escapeHtml(step.coords)})` : '';
@@ -363,7 +586,6 @@ function renderCurrentPlan() {
         </div>
         <div class="step-meta">
           ${step.aetheryte ? `<span class="badge-aetheryte">✦ ${escapeHtml(step.aetheryte)}</span>` : ''}
-          ${step.phase ? `<span>${escapeHtml(step.phase)}</span>` : ''}
           ${step.autoCompletedByInventory ? `<span class="badge-auto">✓ Owned in Inventory</span>` : ''}
           ${step.notes ? `<span>• ${escapeHtml(step.notes)}</span>` : ''}
         </div>
@@ -371,11 +593,10 @@ function renderCurrentPlan() {
     `;
     const checkbox = div.querySelector('.step-checkbox');
     checkbox.addEventListener('change', (e) => {
-      step.completed = e.target.checked;
-      step.autoCompletedByInventory = false;
-      recalculatePlanClient(currentPlan);
-      renderCurrentPlan();
-      schedulePushToGist();
+      mutateCurrentPlanWithCompletionCheck(() => {
+        step.completed = e.target.checked;
+        step.autoCompletedByInventory = false;
+      });
     });
     stepsContainer.appendChild(div);
   }
@@ -415,10 +636,9 @@ function renderCurrentPlan() {
 
       const input = div.querySelector('.qty-input');
       const updateQty = (newVal) => {
-        item.owned = Math.max(0, Number(newVal || 0));
-        recalculatePlanClient(currentPlan);
-        renderCurrentPlan();
-        schedulePushToGist();
+        mutateCurrentPlanWithCompletionCheck(() => {
+          item.owned = Math.max(0, Number(newVal || 0));
+        });
       };
 
       div.querySelector('.btn-dec').addEventListener('click', () => updateQty(item.owned - 1));
@@ -431,6 +651,29 @@ function renderCurrentPlan() {
       itemsContainer.appendChild(div);
     }
   }
+}
+
+function showCompletionModal() {
+  if (!currentPlan) return;
+  document.getElementById('completion-modal-desc').textContent =
+    `You have completed all steps in "${currentPlan.title}". Would you like to archive it, delete it, or leave it open?`;
+  document.getElementById('completion-modal').classList.remove('hidden');
+}
+
+function hideCompletionModal() {
+  document.getElementById('completion-modal').classList.add('hidden');
+}
+
+function promptDeletePlan(planId, planTitle) {
+  pendingDeletePlanId = planId;
+  document.getElementById('delete-modal-desc').textContent =
+    `Are you sure you want to permanently delete "${planTitle || planId}" across all synced devices?`;
+  document.getElementById('delete-modal').classList.remove('hidden');
+}
+
+function hideDeleteModal() {
+  pendingDeletePlanId = null;
+  document.getElementById('delete-modal').classList.add('hidden');
 }
 
 function toggleDrawer(open) {
@@ -492,10 +735,82 @@ async function init() {
   document.getElementById('btn-close-drawer').addEventListener('click', () => toggleDrawer(false));
   document.getElementById('drawer-backdrop').addEventListener('click', () => toggleDrawer(false));
   document.getElementById('plan-search-input').addEventListener('input', renderDrawerPlanList);
+  document.getElementById('chk-show-archived').addEventListener('change', renderDrawerPlanList);
 
   document.getElementById('step-filter-input').addEventListener('input', renderCurrentPlan);
   document.getElementById('chk-hide-completed').addEventListener('change', renderCurrentPlan);
 
+  // Plan management buttons in Summary Card
+  document.getElementById('btn-complete-plan').addEventListener('click', () => {
+    if (!currentPlan) return;
+    const targetState = !isPlanFullyCompleted(currentPlan);
+    mutateCurrentPlanWithCompletionCheck((plan) => {
+      for (const pr of plan.prerequisites || []) pr.completed = targetState;
+      for (const st of plan.steps || []) {
+        st.completed = targetState;
+        if (!targetState) st.autoCompletedByInventory = false;
+      }
+    });
+  });
+
+  document.getElementById('btn-archive-plan').addEventListener('click', () => {
+    if (!currentPlan) return;
+    archivePlanById(currentPlan.id, !currentPlan.archived);
+  });
+
+  document.getElementById('btn-delete-plan').addEventListener('click', () => {
+    if (!currentPlan) return;
+    promptDeletePlan(currentPlan.id, currentPlan.title);
+  });
+
+  // Prerequisites section bulk toggle
+  document.getElementById('btn-toggle-all-prereqs').addEventListener('click', () => {
+    if (!currentPlan || !currentPlan.prerequisites) return;
+    const allDone = currentPlan.prerequisites.every((p) => p.completed);
+    for (const pr of currentPlan.prerequisites) {
+      pr.completed = !allDone;
+    }
+    recalculatePlanClient(currentPlan);
+    renderCurrentPlan();
+    schedulePushToGist();
+  });
+
+  // Completion Modal buttons
+  document.getElementById('btn-close-completion').addEventListener('click', hideCompletionModal);
+  document.getElementById('completion-backdrop').addEventListener('click', hideCompletionModal);
+  document.getElementById('btn-modal-keep').addEventListener('click', hideCompletionModal);
+
+  document.getElementById('btn-modal-archive').addEventListener('click', () => {
+    if (currentPlan) {
+      const archivedId = currentPlan.id;
+      archivePlanById(archivedId, true);
+      hideCompletionModal();
+      const nextActive = (bundleData.index?.plans || []).find((p) => !p.archived && p.id !== archivedId);
+      if (nextActive) openPlan(nextActive.id);
+    }
+  });
+
+  document.getElementById('btn-modal-delete').addEventListener('click', () => {
+    if (currentPlan) {
+      const delId = currentPlan.id;
+      hideCompletionModal();
+      deletePlanById(delId);
+    }
+  });
+
+  // Delete Confirmation Modal buttons
+  document.getElementById('btn-close-delete').addEventListener('click', hideDeleteModal);
+  document.getElementById('delete-backdrop').addEventListener('click', hideDeleteModal);
+  document.getElementById('btn-cancel-delete').addEventListener('click', hideDeleteModal);
+  document.getElementById('btn-confirm-delete').addEventListener('click', () => {
+    if (pendingDeletePlanId) {
+      const idToDelete = pendingDeletePlanId;
+      hideDeleteModal();
+      deletePlanById(idToDelete);
+    }
+  });
+
+  // Cloud Sync Settings
   document.getElementById('btn-sync-settings').addEventListener('click', () => {
     const isSetupVisible = document.getElementById('setup-content').style.display === 'block';
     toggleSetupView(!isSetupVisible);
@@ -518,6 +833,7 @@ async function init() {
     setSyncBadge(false, 'Not Paired');
   });
 
+  // Bulk Inventory Audit Modal
   document.getElementById('btn-isearch-modal').addEventListener('click', () => toggleIsearchModal(true));
   document.getElementById('btn-close-modal').addEventListener('click', () => toggleIsearchModal(false));
   document.getElementById('modal-backdrop').addEventListener('click', () => toggleIsearchModal(false));
@@ -534,10 +850,9 @@ async function init() {
   document.getElementById('btn-apply-isearch').addEventListener('click', () => {
     const raw = document.getElementById('isearch-paste-input').value.trim();
     if (!raw || !currentPlan) return;
-    parseInventoryTextClient(currentPlan, raw);
-    recalculatePlanClient(currentPlan);
-    renderCurrentPlan();
-    schedulePushToGist();
+    mutateCurrentPlanWithCompletionCheck((plan) => {
+      parseInventoryTextClient(plan, raw);
+    });
     document.getElementById('isearch-paste-input').value = '';
     toggleIsearchModal(false);
   });
