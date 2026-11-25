@@ -1,17 +1,59 @@
 :root {
-  --bg-dark: #0d111a;
-  --bg-card: #151c2c;
-  --bg-card-alt: #1b2438;
-  --border-gold: #8c733e;
-  --border-subtle: #27334f;
-  --accent-gold: #e4c16f;
-  --accent-blue: #5ec2f2;
-  --accent-green: #4cd98c;
-  --accent-warn: #f59e42;
-  --accent-danger: #f25f5c;
-  --text-main: #edf1f7;
-  --text-muted: #9aa7c2;
+  color-scheme: light dark;
+  /* Light Theme (Default / System Light) */
+  --bg-dark: #f4f6fa;
+  --bg-card: #ffffff;
+  --bg-card-alt: #f8fafd;
+  --bg-input: #ffffff;
+  --bg-completed: #eef2f7;
+  --top-bar-grad: linear-gradient(180deg, #ffffff 0%, #eef2f8 100%);
+  --border-gold: #c7a456;
+  --border-subtle: #d8e0ee;
+  --accent-gold: #9a6e12;
+  --accent-blue: #1a6fb5;
+  --accent-green: #15803d;
+  --accent-warn: #c25e00;
+  --accent-danger: #d93834;
+  --text-main: #131b2e;
+  --text-npc: #334155;
+  --text-action: #0f172a;
+  --text-muted: #5b6982;
+  --badge-aetheryte-text: #4338ca;
+  --badge-aetheryte-bg: rgba(79, 70, 229, 0.1);
+  --warn-box-text: #92400e;
+  --warn-box-bg: rgba(245, 158, 66, 0.14);
+  --shadow-card: 0 2px 8px rgba(15, 23, 42, 0.06);
+  --shadow-topbar: 0 2px 10px rgba(15, 23, 42, 0.08);
   --radius: 12px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* Dark Theme (System Dark) */
+    --bg-dark: #0d111a;
+    --bg-card: #151c2c;
+    --bg-card-alt: #1b2438;
+    --bg-input: #0d121d;
+    --bg-completed: #111724;
+    --top-bar-grad: linear-gradient(180deg, #1d2740 0%, #131a2b 100%);
+    --border-gold: #8c733e;
+    --border-subtle: #27334f;
+    --accent-gold: #e4c16f;
+    --accent-blue: #5ec2f2;
+    --accent-green: #4cd98c;
+    --accent-warn: #f59e42;
+    --accent-danger: #f25f5c;
+    --text-main: #edf1f7;
+    --text-npc: #d6deeb;
+    --text-action: #ffffff;
+    --text-muted: #9aa7c2;
+    --badge-aetheryte-text: #a5b4fc;
+    --badge-aetheryte-bg: rgba(99, 102, 241, 0.14);
+    --warn-box-text: #fbd38d;
+    --warn-box-bg: rgba(245, 158, 66, 0.12);
+    --shadow-card: 0 4px 12px rgba(0, 0, 0, 0.25);
+    --shadow-topbar: 0 4px 14px rgba(0, 0, 0, 0.45);
+  }
 }
 
 * {
@@ -42,9 +84,9 @@ body {
   justify-content: space-between;
   gap: 12px;
   padding: 12px 16px;
-  background: linear-gradient(180deg, #1d2740 0%, #131a2b 100%);
+  background: var(--top-bar-grad);
   border-bottom: 1px solid var(--border-gold);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  box-shadow: var(--shadow-topbar);
 }
 
 .header-title-wrap {
@@ -87,6 +129,7 @@ body {
   background: rgba(76, 217, 140, 0.16);
   color: var(--accent-green);
   border: 1px solid rgba(76, 217, 140, 0.35);
+  cursor: pointer;
 }
 
 .sync-pill.offline {
@@ -141,11 +184,11 @@ body {
   border-radius: var(--radius);
   padding: 16px;
   margin-bottom: 14px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--shadow-card);
 }
 
 .summary-card {
-  border-color: rgba(140, 115, 62, 0.55);
+  border-color: var(--border-gold);
 }
 
 .plan-summary-text {
@@ -167,7 +210,7 @@ body {
   border-radius: 99px;
   background: var(--bg-card-alt);
   color: var(--accent-blue);
-  border: 1px solid rgba(94, 194, 242, 0.25);
+  border: 1px solid var(--border-subtle);
 }
 
 .currency-chip {
@@ -175,9 +218,9 @@ body {
   font-weight: 600;
   padding: 4px 10px;
   border-radius: 8px;
-  background: rgba(228, 193, 111, 0.12);
+  background: rgba(228, 193, 111, 0.14);
   color: var(--accent-gold);
-  border: 1px solid rgba(228, 193, 111, 0.3);
+  border: 1px solid var(--border-gold);
 }
 
 /* Progress Bar */
@@ -196,7 +239,7 @@ body {
 
 .progress-track {
   height: 9px;
-  background: #0c1018;
+  background: var(--bg-input);
   border-radius: 99px;
   overflow: hidden;
   border: 1px solid var(--border-subtle);
@@ -204,7 +247,7 @@ body {
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #3b82f6 0%, #4cd98c 100%);
+  background: linear-gradient(90deg, #3b82f6 0%, #22c55e 100%);
   transition: width 0.25s ease;
 }
 
@@ -212,9 +255,9 @@ body {
   margin-top: 10px;
   padding: 10px 12px;
   border-radius: 8px;
-  background: rgba(245, 158, 66, 0.12);
+  background: var(--warn-box-bg);
   border: 1px solid rgba(245, 158, 66, 0.45);
-  color: #fbd38d;
+  color: var(--warn-box-text);
   font-size: 0.86rem;
 }
 
@@ -261,7 +304,7 @@ body {
 }
 
 .compact-search {
-  background: #0e131f;
+  background: var(--bg-input);
   color: var(--text-main);
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
@@ -290,7 +333,7 @@ body {
   align-items: flex-start;
   gap: 10px;
   padding: 8px 6px;
-  border-bottom: 1px solid rgba(39, 51, 79, 0.5);
+  border-bottom: 1px solid var(--border-subtle);
   cursor: pointer;
 }
 
@@ -318,7 +361,7 @@ body {
 
 .step-item.completed {
   opacity: 0.58;
-  background: #111724;
+  background: var(--bg-completed);
 }
 
 .step-checkbox {
@@ -352,11 +395,11 @@ body {
 }
 
 .step-npc {
-  color: #d6deeb;
+  color: var(--text-npc);
 }
 
 .step-action {
-  color: #ffffff;
+  color: var(--text-action);
 }
 
 .step-item.completed .step-action {
@@ -373,8 +416,8 @@ body {
 }
 
 .badge-aetheryte {
-  color: #a5b4fc;
-  background: rgba(99, 102, 241, 0.14);
+  color: var(--badge-aetheryte-text);
+  background: var(--badge-aetheryte-bg);
   padding: 1px 7px;
   border-radius: 6px;
 }
@@ -396,8 +439,8 @@ body {
 }
 
 .inv-item.fulfilled {
-  opacity: 0.62;
-  border-color: rgba(76, 217, 140, 0.35);
+  opacity: 0.65;
+  border-color: var(--accent-green);
 }
 
 .inv-top {
@@ -438,7 +481,7 @@ body {
 }
 
 .qty-btn {
-  background: #101624;
+  background: var(--bg-input);
   color: var(--text-main);
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
@@ -452,7 +495,7 @@ body {
   width: 58px;
   height: 32px;
   text-align: center;
-  background: #0d121d;
+  background: var(--bg-input);
   color: var(--text-main);
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
@@ -483,7 +526,7 @@ body {
 .drawer-backdrop, .modal-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.65);
+  background: rgba(0, 0, 0, 0.55);
 }
 
 .drawer-panel {
@@ -521,7 +564,7 @@ body {
   padding: 9px 12px;
   border-radius: 8px;
   border: 1px solid var(--border-subtle);
-  background: #0d121d;
+  background: var(--bg-input);
   color: var(--text-main);
   font-size: 0.9rem;
 }
@@ -543,7 +586,7 @@ body {
 
 .plan-card-item.active {
   border-color: var(--accent-gold);
-  background: rgba(228, 193, 111, 0.1);
+  background: rgba(228, 193, 111, 0.12);
 }
 
 .plan-card-title {
@@ -603,7 +646,7 @@ body {
   flex: 1;
   margin: 0;
   padding: 10px;
-  background: #0b0f19;
+  background: var(--bg-input);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   font-size: 0.8rem;
@@ -613,7 +656,7 @@ body {
 
 #isearch-paste-input {
   width: 100%;
-  background: #0b0f19;
+  background: var(--bg-input);
   color: var(--text-main);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
