@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#141c2e" />
+  <title>Checklist &amp; Route Viewer</title>
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <!-- Top Header Bar -->
+    <header class="top-bar">
+      <button id="btn-open-drawer" class="icon-btn" aria-label="Browse all plans">
+        <span class="hamburger">☰</span>
+        <span class="btn-label">Lists</span>
+      </button>
+      <div class="header-title-wrap">
+        <span id="badge-tier" class="badge-ft hidden"></span>
+        <h1 id="plan-title">Checklist Viewer</h1>
+      </div>
+      <div class="header-actions">
+        <span id="sync-status" class="sync-pill" title="Tap to configure or refresh Gist sync">Sync</span>
+        <button id="btn-isearch-modal" class="secondary-btn hidden" title="Bulk inventory check">Audit</button>
+        <button id="btn-sync-settings" class="icon-btn" title="Cloud Sync Settings">⚙</button>
+      </div>
+    </header>
+
+    <!-- Slide-over Drawer for Switching & Searching Plans -->
+    <aside id="plans-drawer" class="drawer hidden" aria-hidden="true">
+      <div class="drawer-backdrop" id="drawer-backdrop"></div>
+      <div class="drawer-panel">
+        <div class="drawer-header">
+          <h2>Saved Lists</h2>
+          <button id="btn-close-drawer" class="icon-btn" aria-label="Close drawer">✕</button>
+        </div>
+        <div class="drawer-search">
+          <input
+            type="search"
+            id="plan-search-input"
+            placeholder="Search by title, tag, item, or location..."
+            autocomplete="off"
+          />
+        </div>
+        <div id="plan-list-container" class="plan-list"></div>
+      </div>
+    </aside>
+
+    <!-- First-Time Cloud Sync Pairing Card (Shown when no Gist credentials are in localStorage) -->
+    <main class="main-content" id="setup-content" style="display: none;">
+      <section class="card summary-card" style="max-width: 520px; margin: 32px auto;">
+        <h2 style="margin-top: 0; color: var(--accent-gold);">Connect Private Gist Sync</h2>
+        <p class="plan-summary-text">
+          Enter your Private Gist ID and Fine-Grained Token (or open your one-tap pairing link) to load and sync your checklists on this device. Credentials are stored only in this browser's local storage.
+        </p>
+        <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 14px;">
+          <input
+            type="text"
+            id="input-gist-id"
+            class="compact-search"
+            style="padding: 10px; font-size: 0.92rem;"
+            placeholder="Secret Gist ID (e.g. a1b2c3d4e5f6...)"
+            autocomplete="off"
+          />
+          <input
+            type="password"
+            id="input-gist-token"
+            class="compact-search"
+            style="padding: 10px; font-size: 0.92rem;"
+            placeholder="GitHub Personal Access Token (github_pat_...)"
+            autocomplete="off"
+          />
+          <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 6px;">
+            <button id="btn-disconnect-gist" class="secondary-btn hidden">Disconnect</button>
+            <button id="btn-save-gist" class="primary-btn">Connect &amp; Sync</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Main Content Area (Responsive Single Column on Phone, Split Grid on iPad) -->
+    <main class="main-content" id="main-content">
+      <!-- Plan Summary & Progress Banner -->
+      <section class="card summary-card" id="summary-section">
+        <p id="plan-summary" class="plan-summary-text"></p>
+        <div id="plan-tags" class="tags-row"></div>
+
+        <div class="progress-bar-wrap">
+          <div class="progress-stats">
+            <span id="progress-label">0 / 0 Steps Completed</span>
+            <span id="progress-percent">0%</span>
+          </div>
+          <div class="progress-track">
+            <div id="progress-fill" class="progress-fill" style="width: 0%"></div>
+          </div>
+        </div>
+
+        <!-- Warnings & Totals -->
+        <div id="currency-chips" class="currency-row"></div>
+        <div id="ft-warnings" class="warnings-box hidden"></div>
+      </section>
+
+      <div class="workspace-grid">
+        <!-- Left/Top Column: Prerequisites & Chronological Step-by-Step Route -->
+        <div class="route-column">
+          <!-- Prerequisites and Advance Prep -->
+          <section class="card" id="prereq-section">
+            <div class="section-header">
+              <h2>Prerequisites &amp; Advance Prep</h2>
+            </div>
+            <ul id="prereq-list" class="checklist"></ul>
+          </section>
+
+          <!-- Step-by-Step Route -->
+          <section class="card" id="route-section">
+            <div class="section-header">
+              <h2>Step-by-Step Route</h2>
+              <div class="filter-controls">
+                <input
+                  type="search"
+                  id="step-filter-input"
+                  class="compact-search"
+                  placeholder="Filter steps..."
+                />
+                <label class="toggle-label">
+                  <input type="checkbox" id="chk-hide-completed" />
+                  <span>Hide Done</span>
+                </label>
+              </div>
+            </div>
+            <div id="steps-list" class="steps-container"></div>
+          </section>
+        </div>
+
+        <!-- Right/Bottom Column: Interactive Inventory & Needed Materials -->
+        <div class="inventory-column">
+          <section class="card" id="inventory-section">
+            <div class="section-header">
+              <h2>Inventory &amp; Materials</h2>
+              <span class="sub-hint">Tap + / − or "Have All" to auto-adjust route</span>
+            </div>
+            <div id="items-list" class="items-container"></div>
+          </section>
+        </div>
+      </div>
+    </main>
+
+    <!-- Bulk Inventory Audit Modal -->
+    <div id="isearch-modal" class="modal hidden" role="dialog" aria-modal="true">
+      <div class="modal-backdrop" id="modal-backdrop"></div>
+      <div class="modal-card">
+        <div class="modal-header">
+          <h3>Quick Inventory Audit</h3>
+          <button id="btn-close-modal" class="icon-btn">✕</button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-desc">
+            1. Copy search commands for every tracked item in this list:
+          </p>
+          <div class="macro-box-wrap">
+            <pre id="isearch-macro-text" class="macro-pre"></pre>
+            <button id="btn-copy-macro" class="primary-btn">Copy</button>
+          </div>
+          <p class="modal-desc">
+            2. Or paste item quantity results (e.g. <code>Item Name: 12</code>) below to update all owned quantities at once:
+          </p>
+          <textarea
+            id="isearch-paste-input"
+            rows="4"
+            placeholder="Item Name: 12"
+          ></textarea>
+          <div class="modal-footer">
+            <button id="btn-apply-isearch" class="primary-btn">Apply Owned Quantities</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>

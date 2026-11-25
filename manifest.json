@@ -1,0 +1,16 @@
+{
+  "name": "Route & Checklist Viewer",
+  "short_name": "Checklists",
+  "description": "Personal Route & Inventory Checklist Viewer",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0d111a",
+  "theme_color": "#1a233a",
+  "icons": [
+    {
+      "src": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Crect width='128' height='128' rx='24' fill='%23162038'/%3E%3Cpath d='M36 66L56 86L94 44' fill='none' stroke='%235ec2f2' stroke-width='12' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E",
+      "sizes": "128x128",
+      "type": "image/svg+xml"
+    }
+  ]
+}
