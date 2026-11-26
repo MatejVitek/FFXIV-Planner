@@ -15,7 +15,7 @@
   <div class="app-shell">
     <!-- Top Header Bar -->
     <header class="top-bar">
-      <button id="btn-open-drawer" class="icon-btn" aria-label="Browse all plans">
+      <button id="btn-open-drawer" class="icon-btn" aria-label="Browse all lists">
         <span class="hamburger">☰</span>
         <span class="btn-label">Lists</span>
       </button>
@@ -25,12 +25,12 @@
       </div>
       <div class="header-actions">
         <span id="sync-status" class="sync-pill" title="Tap to refresh Gist sync">Sync</span>
-        <button id="btn-isearch-modal" class="secondary-btn hidden" title="Bulk inventory check">Audit</button>
+        <button id="btn-isearch-modal" class="secondary-btn hidden" title="Import inventory quantities via /isearch">Audit</button>
         <button id="btn-sync-settings" class="icon-btn" title="Cloud Sync Settings">⚙</button>
       </div>
     </header>
 
-    <!-- Slide-over Drawer for Switching, Searching, Archiving & Deleting Plans -->
+    <!-- Slide-over Drawer for Switching, Searching, Archiving & Deleting Lists -->
     <aside id="plans-drawer" class="drawer hidden" aria-hidden="true">
       <div class="drawer-backdrop" id="drawer-backdrop"></div>
       <div class="drawer-panel">
@@ -86,20 +86,20 @@
       </section>
     </main>
 
-    <!-- Main Content Area -->
+    <!-- Main Content Area (Clean Full-Width Route Layout) -->
     <main class="main-content" id="main-content">
-      <!-- Plan Summary, Controls & Progress Banner -->
+      <!-- Summary, Controls & Progress Banner -->
       <section class="card summary-card" id="summary-section">
         <div class="summary-top-row">
           <p id="plan-summary" class="plan-summary-text"></p>
           <div class="plan-manage-actions" id="plan-manage-actions">
-            <button id="btn-complete-plan" class="small-action-btn" title="Mark entire plan completed or incomplete">
-              ✓ Complete Plan
+            <button id="btn-complete-plan" class="small-action-btn" title="Mark entire list completed or incomplete">
+              ✓ Complete List
             </button>
-            <button id="btn-archive-plan" class="small-action-btn" title="Archive or unarchive this plan">
+            <button id="btn-archive-plan" class="small-action-btn" title="Archive or unarchive this list">
               Archive
             </button>
-            <button id="btn-delete-plan" class="small-action-btn danger-btn" title="Delete this plan">
+            <button id="btn-delete-plan" class="small-action-btn danger-btn" title="Delete this list">
               Delete
             </button>
           </div>
@@ -122,50 +122,34 @@
         <div id="ft-warnings" class="warnings-box hidden"></div>
       </section>
 
-      <div class="workspace-grid">
-        <!-- Left/Top Column: Prerequisites & Chronological Step-by-Step Route -->
-        <div class="route-column">
-          <!-- Prerequisites and Advance Prep -->
-          <section class="card" id="prereq-section">
-            <div class="section-header">
-              <h2>Prerequisites &amp; Advance Prep</h2>
-              <button id="btn-toggle-all-prereqs" class="small-action-btn">✓ Complete Prep</button>
-            </div>
-            <ul id="prereq-list" class="checklist"></ul>
-          </section>
-
-          <!-- Step-by-Step Route -->
-          <section class="card" id="route-section">
-            <div class="section-header">
-              <h2>Step-by-Step Route</h2>
-              <div class="filter-controls">
-                <input
-                  type="search"
-                  id="step-filter-input"
-                  class="compact-search"
-                  placeholder="Filter steps..."
-                />
-                <label class="toggle-label">
-                  <input type="checkbox" id="chk-hide-completed" />
-                  <span>Hide Done</span>
-                </label>
-              </div>
-            </div>
-            <div id="steps-list" class="steps-container"></div>
-          </section>
+      <!-- Prerequisites and Advance Prep -->
+      <section class="card" id="prereq-section">
+        <div class="section-header">
+          <h2>Prerequisites &amp; Advance Prep</h2>
+          <button id="btn-toggle-all-prereqs" class="small-action-btn">✓ Complete Prep</button>
         </div>
+        <ul id="prereq-list" class="checklist"></ul>
+      </section>
 
-        <!-- Right/Bottom Column: Interactive Inventory & Needed Materials -->
-        <div class="inventory-column">
-          <section class="card" id="inventory-section">
-            <div class="section-header">
-              <h2>Inventory &amp; Materials</h2>
-              <span class="sub-hint">Tap + / − or "Have All" to auto-adjust route</span>
-            </div>
-            <div id="items-list" class="items-container"></div>
-          </section>
+      <!-- Step-by-Step Route -->
+      <section class="card" id="route-section">
+        <div class="section-header">
+          <h2>Step-by-Step Route</h2>
+          <div class="filter-controls">
+            <input
+              type="search"
+              id="step-filter-input"
+              class="compact-search"
+              placeholder="Filter steps..."
+            />
+            <label class="toggle-label">
+              <input type="checkbox" id="chk-hide-completed" />
+              <span>Hide Done</span>
+            </label>
+          </div>
         </div>
-      </div>
+        <div id="steps-list" class="steps-container"></div>
+      </section>
     </main>
 
     <!-- Automatic Plan Completion Popup Modal -->
@@ -199,7 +183,7 @@
         </div>
         <div class="modal-body">
           <p class="modal-desc" id="delete-modal-desc">
-            Are you sure you want to permanently delete this list across your synced devices?
+            Are you sure you want to permanently delete this list?
           </p>
           <div class="modal-actions-row">
             <button id="btn-confirm-delete" class="small-action-btn danger-btn">Delete Permanently</button>
@@ -209,29 +193,26 @@
       </div>
     </div>
 
-    <!-- Bulk Inventory Audit Modal -->
+    <!-- Inventory Audit (/isearch) Import Modal -->
     <div id="isearch-modal" class="modal hidden" role="dialog" aria-modal="true">
       <div class="modal-backdrop" id="modal-backdrop"></div>
       <div class="modal-card">
         <div class="modal-header">
-          <h3>Quick Inventory Audit</h3>
+          <h3>Inventory Audit (/isearch)</h3>
           <button id="btn-close-modal" class="icon-btn">✕</button>
         </div>
         <div class="modal-body">
           <p class="modal-desc">
-            1. Copy search commands for every tracked item in this list:
+            1. Copy and run the macro(s) below in-game to check raw materials and basic intermediate crafts first:
           </p>
-          <div class="macro-box-wrap">
-            <pre id="isearch-macro-text" class="macro-pre"></pre>
-            <button id="btn-copy-macro" class="primary-btn">Copy</button>
-          </div>
+          <div id="isearch-macros-container"></div>
           <p class="modal-desc">
-            2. Or paste item quantity results (e.g. <code>Item Name: 12</code>) below to update all owned quantities at once:
+            2. Paste the chat log output (or lines like <code>Item Name: 12</code>) below to automatically adjust route quantities and check off items you already own:
           </p>
           <textarea
             id="isearch-paste-input"
             rows="4"
-            placeholder="Item Name: 12"
+            placeholder='Example: 12 items found for "Darksteel Ore"&#10;or: Darksteel Ore: 12'
           ></textarea>
           <div class="modal-footer">
             <button id="btn-apply-isearch" class="primary-btn">Apply Owned Quantities</button>

@@ -1,12 +1,5 @@
 /**
  * Checklist & Route Viewer - Client App with Secret GitHub Gist Two-Way Sync
- *
- * Features:
- *   - System Light/Dark theme adaptive UI
- *   - Archive / Unarchive & Delete lists (with tombstones synced across all devices)
- *   - Active vs Archived sections in drawer search ("Show / Search Archived Lists")
- *   - Whole-Plan, Prerequisites Section, and Per-Phase completion toggles
- *   - Automatic Completion Modal when a list reaches 100% completion
  */
 
 const STORAGE_LAST_PLAN_KEY = 'checklist_viewer_last_plan_id';
@@ -15,7 +8,7 @@ const STORAGE_GIST_ID_KEY = 'checklist_viewer_gist_id';
 const STORAGE_GIST_TOKEN_KEY = 'checklist_viewer_gist_token';
 const GIST_FILENAME = 'checklist-sync-store.json';
 
-let bundleData = { index: { latestPlanId: null, deletedPlanIds: [], plans: [] }, plans: {} };
+let bundleData = { index: { latestPlanId: null, plans: [] }, plans: {} };
 let currentPlan = null;
 let pushTimeout = null;
 let pendingDeletePlanId = null;
@@ -89,11 +82,9 @@ function rebuildBundleIndexClient() {
 
   allPlans.sort((a, b) => String(b.updatedAt || '').localeCompare(String(a.updatedAt || '')));
   const activePlans = allPlans.filter((p) => !p.archived);
-  const deletedIds = Array.isArray(bundleData.index?.deletedPlanIds) ? bundleData.index.deletedPlanIds : [];
 
   bundleData.index = {
     latestPlanId: activePlans[0]?.id || allPlans[0]?.id || null,
-    deletedPlanIds: [...new Set(deletedIds)],
     updatedAt: new Date().toISOString(),
     plans: allPlans
   };
@@ -151,10 +142,6 @@ function recalculatePlanClient(plan) {
   return plan;
 }
 
-/**
- * Wraps any user mutation on currentPlan to detect when the plan transitions
- * from incomplete (<100%) to 100% completed, triggering the completion popup!
- */
 function mutateCurrentPlanWithCompletionCheck(mutatorFn) {
   if (!currentPlan) return;
   const wasCompleted = isPlanFullyCompleted(currentPlan);
@@ -188,15 +175,6 @@ function archivePlanById(planId, archiveState) {
 function deletePlanById(planId) {
   if (!planId) return;
   delete bundleData.plans[planId];
-  if (!bundleData.index) {
-    bundleData.index = { latestPlanId: null, deletedPlanIds: [], plans: [] };
-  }
-  if (!Array.isArray(bundleData.index.deletedPlanIds)) {
-    bundleData.index.deletedPlanIds = [];
-  }
-  if (!bundleData.index.deletedPlanIds.includes(planId)) {
-    bundleData.index.deletedPlanIds.push(planId);
-  }
   rebuildBundleIndexClient();
   schedulePushToGist();
 
@@ -276,7 +254,7 @@ function schedulePushToGist() {
     } catch {
       setSyncBadge(false, 'Saved Locally');
     }
-  }, 450);
+  }, 350);
 }
 
 function parseInventoryTextClient(plan, rawText) {
@@ -296,6 +274,44 @@ function parseInventoryTextClient(plan, rawText) {
       }
     }
   }
+}
+
+/**
+ * Builds /isearch macro blocks ordered with Raw Materials (mob drops, gathered/bought items)
+ * FIRST, followed by Basic Crafts (nuggets, ingots, lumbers, glues, threads, waters).
+ * Excludes final turn-in products and items already fulfilled (remaining === 0).
+ */
+function buildAuditMacroBlocks(plan) {
+  const allItems = plan.items || [];
+  const rawNames = new Set(
+    allItems
+      .filter((i) => i.category === 'raw' || (!i.yieldPerCraft && i.category !== 'base' && i.category !== 'sub' && i.category !== 'final'))
+      .map((i) => norm(i.name))
+  );
+
+  const rawMaterials = [];
+  const baseCrafts = [];
+
+  for (const item of allItems) {
+    if (!item.name || item.remaining === 0) continue;
+    if (item.category === 'final' || item.category === 'sub') continue;
+    if (rawNames.has(norm(item.name))) {
+      rawMaterials.push(item.name);
+    } else if (item.category === 'base' || item.parentItem) {
+      baseCrafts.push(item.name);
+    }
+  }
+
+  const ordered = [...rawMaterials, ...baseCrafts];
+  const blocks = [];
+  for (let i = 0; i < ordered.length; i += 14) {
+    const chunk = ordered.slice(i, i + 14);
+    blocks.push({
+      label: ordered.length > 14 ? `Macro ${Math.floor(i / 14) + 1} (Items ${i + 1}–${i + chunk.length})` : 'Macro',
+      text: chunk.map((n) => `/isearch "${n}"`).join('\n')
+    });
+  }
+  return blocks;
 }
 
 function selectInitialPlanId() {
@@ -324,15 +340,15 @@ function openPlan(planId) {
     currentPlan = null;
     document.getElementById('plan-title').textContent = 'No Active Lists';
     document.getElementById('plan-summary').textContent =
-      'Open the Lists menu (☰) to view archived lists, or ask Antigravity to create a new plan.';
+      'Open the Lists menu (☰) to view archived lists, or create a new plan.';
     document.getElementById('badge-archived').classList.add('hidden');
     document.getElementById('plan-manage-actions').classList.add('hidden');
+    document.getElementById('btn-isearch-modal').classList.add('hidden');
     document.getElementById('plan-tags').innerHTML = '';
     document.getElementById('currency-chips').innerHTML = '';
     document.getElementById('ft-warnings').classList.add('hidden');
     document.getElementById('prereq-section').classList.add('hidden');
     document.getElementById('steps-list').innerHTML = '<p class="sub-hint">No steps to display.</p>';
-    document.querySelector('.inventory-column').classList.add('hidden');
     document.getElementById('progress-label').textContent = '0 / 0 Steps Completed';
     document.getElementById('progress-percent').textContent = '0%';
     document.getElementById('progress-fill').style.width = '0%';
@@ -357,7 +373,7 @@ function createDrawerPlanCard(item) {
       ${item.archived ? '<span class="badge-archived">ARCHIVED</span>' : ''}
     </div>
     <div class="plan-card-meta">
-      ${item.completedSteps || 0}/${item.totalSteps || 0} steps (${pct}%) • ${item.totalItems || 0} items • ${dateStr}
+      ${item.completedSteps || 0}/${item.totalSteps || 0} steps (${pct}%) • ${dateStr}
     </div>
     <div class="plan-card-actions">
       <button class="small-action-btn btn-card-archive">
@@ -404,9 +420,10 @@ function renderDrawerPlanList() {
   const archivedList = matchingPlans.filter((p) => p.archived);
 
   if (activeList.length === 0 && (!showArchived || archivedList.length === 0)) {
-    const hiddenArchivedHint = !showArchived && archivedList.length > 0
-      ? ` (${archivedList.length} matching archived list${archivedList.length > 1 ? 's' : ''} hidden — check "Show / Search Archived Lists" above)`
-      : '';
+    const hiddenArchivedHint =
+      !showArchived && archivedList.length > 0
+        ? ` (${archivedList.length} matching archived list${archivedList.length > 1 ? 's' : ''} hidden — check "Show / Search Archived Lists" above)`
+        : '';
     container.innerHTML = `<p class="sub-hint">No matching lists found${hiddenArchivedHint}.</p>`;
     return;
   }
@@ -447,7 +464,7 @@ function renderCurrentPlan() {
 
   const fullyDone = isPlanFullyCompleted(currentPlan);
   const btnCompletePlan = document.getElementById('btn-complete-plan');
-  btnCompletePlan.textContent = fullyDone ? '↺ Mark Plan Incomplete' : '✓ Complete Plan';
+  btnCompletePlan.textContent = fullyDone ? '↺ Mark Incomplete' : '✓ Complete List';
 
   const auditBtn = document.getElementById('btn-isearch-modal');
   if ((currentPlan.items || []).length > 0) {
@@ -520,7 +537,6 @@ function renderCurrentPlan() {
   const stepQuery = norm(document.getElementById('step-filter-input')?.value || '');
   stepsContainer.innerHTML = '';
 
-  // Compute phase stats across all steps in the plan
   const phaseStats = new Map();
   for (const s of steps) {
     const pName = s.phase || 'Steps';
@@ -600,57 +616,6 @@ function renderCurrentPlan() {
     });
     stepsContainer.appendChild(div);
   }
-
-  // Inventory & Materials
-  const invColumn = document.querySelector('.inventory-column');
-  const itemsContainer = document.getElementById('items-list');
-  const items = currentPlan.items || [];
-  itemsContainer.innerHTML = '';
-
-  if (items.length === 0) {
-    invColumn.classList.add('hidden');
-  } else {
-    invColumn.classList.remove('hidden');
-    for (const item of items) {
-      const fulfilled = item.remaining === 0 && item.needed > 0;
-      const div = document.createElement('div');
-      div.className = `inv-item ${fulfilled ? 'fulfilled' : ''}`;
-      div.innerHTML = `
-        <div class="inv-top">
-          <span class="inv-name">${escapeHtml(item.name)}</span>
-          <span class="inv-counts">
-            Need: ${item.needed} • Owned: ${item.owned} • <strong>Left: ${item.remaining}</strong>
-          </span>
-        </div>
-        <div class="inv-acq">
-          ${escapeHtml(item.acquisition || '')}
-          ${item.parentItem ? ` <em>(for ${escapeHtml(item.parentItem)})</em>` : ''}
-        </div>
-        <div class="inv-controls">
-          <button class="qty-btn btn-dec" aria-label="Decrease owned">−</button>
-          <input type="number" class="qty-input" min="0" value="${item.owned}" aria-label="Owned quantity" />
-          <button class="qty-btn btn-inc" aria-label="Increase owned">+</button>
-          <button class="have-all-btn">${fulfilled ? 'Reset (0)' : `Have All (${item.needed})`}</button>
-        </div>
-      `;
-
-      const input = div.querySelector('.qty-input');
-      const updateQty = (newVal) => {
-        mutateCurrentPlanWithCompletionCheck(() => {
-          item.owned = Math.max(0, Number(newVal || 0));
-        });
-      };
-
-      div.querySelector('.btn-dec').addEventListener('click', () => updateQty(item.owned - 1));
-      div.querySelector('.btn-inc').addEventListener('click', () => updateQty(item.owned + 1));
-      input.addEventListener('change', (e) => updateQty(e.target.value));
-      div.querySelector('.have-all-btn').addEventListener('click', () => {
-        updateQty(fulfilled ? 0 : item.needed);
-      });
-
-      itemsContainer.appendChild(div);
-    }
-  }
 }
 
 function showCompletionModal() {
@@ -667,7 +632,7 @@ function hideCompletionModal() {
 function promptDeletePlan(planId, planTitle) {
   pendingDeletePlanId = planId;
   document.getElementById('delete-modal-desc').textContent =
-    `Are you sure you want to permanently delete "${planTitle || planId}" across all synced devices?`;
+    `Are you sure you want to permanently delete "${planTitle || planId}"?`;
   document.getElementById('delete-modal').classList.remove('hidden');
 }
 
@@ -695,11 +660,30 @@ function toggleIsearchModal(open) {
   const modal = document.getElementById('isearch-modal');
   modal.classList.toggle('hidden', !open);
   if (open && currentPlan) {
-    const lines = [];
-    for (const item of (currentPlan.items || []).slice(0, 14)) {
-      lines.push(`/isearch "${item.name}"`);
+    const container = document.getElementById('isearch-macros-container');
+    container.innerHTML = '';
+    const blocks = buildAuditMacroBlocks(currentPlan);
+    if (blocks.length === 0) {
+      container.innerHTML = '<p class="sub-hint">All raw materials and base intermediates are already fulfilled.</p>';
+      return;
     }
-    document.getElementById('isearch-macro-text').textContent = lines.join('\n');
+    for (const block of blocks) {
+      const wrap = document.createElement('div');
+      wrap.className = 'macro-box-wrap';
+      wrap.innerHTML = `
+        <pre class="macro-pre">${escapeHtml(block.text)}</pre>
+        <button class="primary-btn btn-copy-block">Copy ${escapeHtml(block.label)}</button>
+      `;
+      const btn = wrap.querySelector('.btn-copy-block');
+      btn.addEventListener('click', () => {
+        navigator.clipboard?.writeText(block.text);
+        btn.textContent = 'Copied!';
+        setTimeout(() => {
+          btn.textContent = `Copy ${block.label}`;
+        }, 1500);
+      });
+      container.appendChild(wrap);
+    }
   }
 }
 
@@ -740,7 +724,6 @@ async function init() {
   document.getElementById('step-filter-input').addEventListener('input', renderCurrentPlan);
   document.getElementById('chk-hide-completed').addEventListener('change', renderCurrentPlan);
 
-  // Plan management buttons in Summary Card
   document.getElementById('btn-complete-plan').addEventListener('click', () => {
     if (!currentPlan) return;
     const targetState = !isPlanFullyCompleted(currentPlan);
@@ -763,7 +746,6 @@ async function init() {
     promptDeletePlan(currentPlan.id, currentPlan.title);
   });
 
-  // Prerequisites section bulk toggle
   document.getElementById('btn-toggle-all-prereqs').addEventListener('click', () => {
     if (!currentPlan || !currentPlan.prerequisites) return;
     const allDone = currentPlan.prerequisites.every((p) => p.completed);
@@ -775,7 +757,6 @@ async function init() {
     schedulePushToGist();
   });
 
-  // Completion Modal buttons
   document.getElementById('btn-close-completion').addEventListener('click', hideCompletionModal);
   document.getElementById('completion-backdrop').addEventListener('click', hideCompletionModal);
   document.getElementById('btn-modal-keep').addEventListener('click', hideCompletionModal);
@@ -798,7 +779,6 @@ async function init() {
     }
   });
 
-  // Delete Confirmation Modal buttons
   document.getElementById('btn-close-delete').addEventListener('click', hideDeleteModal);
   document.getElementById('delete-backdrop').addEventListener('click', hideDeleteModal);
   document.getElementById('btn-cancel-delete').addEventListener('click', hideDeleteModal);
@@ -810,7 +790,6 @@ async function init() {
     }
   });
 
-  // Cloud Sync Settings
   document.getElementById('btn-sync-settings').addEventListener('click', () => {
     const isSetupVisible = document.getElementById('setup-content').style.display === 'block';
     toggleSetupView(!isSetupVisible);
@@ -833,19 +812,9 @@ async function init() {
     setSyncBadge(false, 'Not Paired');
   });
 
-  // Bulk Inventory Audit Modal
   document.getElementById('btn-isearch-modal').addEventListener('click', () => toggleIsearchModal(true));
   document.getElementById('btn-close-modal').addEventListener('click', () => toggleIsearchModal(false));
   document.getElementById('modal-backdrop').addEventListener('click', () => toggleIsearchModal(false));
-
-  document.getElementById('btn-copy-macro').addEventListener('click', () => {
-    const txt = document.getElementById('isearch-macro-text').textContent;
-    navigator.clipboard?.writeText(txt);
-    document.getElementById('btn-copy-macro').textContent = 'Copied!';
-    setTimeout(() => {
-      document.getElementById('btn-copy-macro').textContent = 'Copy';
-    }, 1500);
-  });
 
   document.getElementById('btn-apply-isearch').addEventListener('click', () => {
     const raw = document.getElementById('isearch-paste-input').value.trim();
